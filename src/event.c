@@ -2,6 +2,7 @@
 // Copyright (c) 2019, Yuxuan Shui <yshuiv7@gmail.com>
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <X11/Xlibint.h>
 #include <X11/extensions/sync.h>
@@ -212,19 +213,22 @@ static void configure_win(session_t *ps, xcb_configure_notify_event_t *ce) {
 			factor_change = true;
 		}
 
-		mw->g.x = ce->x;
-		mw->g.y = ce->y;
-
-		if (mw->g.width != ce->width || mw->g.height != ce->height ||
-		    mw->g.border_width != ce->border_width) {
-			log_trace("Window size changed, %dx%d -> %dx%d", mw->g.width,
-			          mw->g.height, ce->width, ce->height);
-			mw->g.width = ce->width;
-			mw->g.height = ce->height;
-			mw->g.border_width = ce->border_width;
-			win_on_win_size_change(ps, mw);
-			win_update_bounding_shape(ps, mw);
-		}
+        if(win_should_transition(ps, mw, ce)) {
+            win_start_transition(ps, mw, ce);
+        } else {
+            mw->g.x = ce->x;
+            mw->g.y = ce->y;
+            if (mw->g.width != ce->width || mw->g.height != ce->height ||
+                mw->g.border_width != ce->border_width) {
+                log_trace("Window size changed, %dx%d -> %dx%d", mw->g.width,
+                         mw->g.height, ce->width, ce->height);
+                mw->g.width = ce->width;
+                mw->g.height = ce->height;
+                mw->g.border_width = ce->border_width;
+                win_on_win_size_change(ps, mw);
+                win_update_bounding_shape(ps, mw);
+            }
+        }
 
 		region_t new_extents;
 		pixman_region32_init(&new_extents);

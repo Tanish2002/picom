@@ -652,6 +652,82 @@ double win_calc_opacity_target(session_t *ps, const struct managed_win *w, bool 
 	return opacity;
 }
 
+bool win_should_transition(session_t *ps, const struct managed_win *w, xcb_configure_notify_event_t *ce) {
+    return abs(w->g.x - ce->x) > 300 || abs(w->g.y - ce->y) > 300 ||
+        abs(w->g.width - ce->width) > 300 || abs(w->g.height - ce->height) > 300;
+}
+
+void win_start_transition(session_t *ps, struct managed_win *w, xcb_configure_notify_event_t *ce) {
+    w->is_transitioning = true;
+
+    w->transition_start_geometry.x = w->g.x;
+    w->transition_start_geometry.y = w->g.y;
+    w->transition_start_geometry.width = w->g.width;
+    w->transition_start_geometry.height = w->g.height;
+
+    w->transition_end_geometry.x = ce->x;
+    w->transition_end_geometry.y = ce->y;
+    w->transition_end_geometry.width = ce->width;
+    w->transition_end_geometry.height = ce->height;
+
+    struct timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+    w->transition_start_time = (int64_t)tp.tv_sec * 1000 + (int64_t)tp.tv_nsec / 1000000;
+}
+
+void win_perform_transition_step(session_t *ps, struct managed_win *w) {
+    region_t damage;
+    pixman_region32_init(&damage);
+    win_extents(w, &damage);
+
+    int transition_duration = 250;
+    // TODO: extract time functions into time.c or something like that
+    struct timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+    int current_time = (int64_t)tp.tv_sec * 1000 + (int64_t)tp.tv_nsec / 1000000;
+
+    int elapsed_time = current_time - w->transition_start_time;
+
+    float t;
+    t = (float) elapsed_time/(transition_duration/2);
+    if (t < 1) {
+        t = (float) 1/2*t*t*t;
+    } else {
+        t -= 2;
+        t = (float) 1/2 * (t*t*t+2);
+    }
+
+    if (elapsed_time >= transition_duration) {
+        w->transition_start_time = 0;
+        w->is_transitioning = false;
+        t = 1;
+    }
+
+    w->g.x = (int16_t)((float)w->transition_start_geometry.x + (float)((float)w->transition_end_geometry.x - (float)w->transition_start_geometry.x) * t);
+    w->g.y = w->transition_start_geometry.y + (w->transition_end_geometry.y - w->transition_start_geometry.y) * t;
+
+    w->g.width = w->transition_start_geometry.width + (w->transition_end_geometry.width - w->transition_start_geometry.width) * t;
+    w->g.height = w->transition_start_geometry.height + (w->transition_end_geometry.height - w->transition_start_geometry.height) * t;
+
+
+    region_t new_extents;
+    pixman_region32_init(&new_extents);
+    win_extents(w, &new_extents);
+    pixman_region32_union(&damage, &damage, &new_extents);
+    pixman_region32_fini(&new_extents);
+
+    win_on_win_size_change(ps, w);
+    win_update_bounding_shape(ps, w);
+    win_on_factor_change(ps, w);
+    win_process_flags(ps, w);
+
+    add_damage(ps, &damage);
+    win_update_screen(ps, w);
+
+    pixman_region32_fini(&damage);
+
+}
+
 /**
  * Determine whether a window is to be dimmed.
  */
@@ -1020,7 +1096,7 @@ void win_on_win_size_change(session_t *ps, struct managed_win *w) {
 		w->flags |= WIN_FLAGS_IMAGES_STALE;
 		ps->pending_updates = true;
 	} else {
-		assert(w->state == WSTATE_UNMAPPED);
+		assert(w->state == WSTATE_UNMAPPED || w->state == WSTATE_UNMAPPING);
 	}
 	free_paint(ps, &w->shadow_paint);
 }

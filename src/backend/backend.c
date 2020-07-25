@@ -13,6 +13,13 @@
 #include "win.h"
 #include "x.h"
 
+#define WIDTH 1024
+#define HEIGHT 640
+
+
+#define ARRAY_LENGTH(A) ((int) (sizeof (A) / sizeof ((A) [0])))
+
+
 extern struct backend_operations xrender_ops, dummy_ops;
 #ifdef CONFIG_OPENGL
 extern struct backend_operations glx_ops;

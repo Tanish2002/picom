@@ -24,8 +24,12 @@
 #include "utils.h"
 #include "win.h"
 #include "x.h"
+#include <xcb/xcb_icccm.h>
 
 enum root_flags { ROOT_FLAGS_SCREEN_CHANGE = 1 };
+
+#define XCB_CONFIG_WINDOW_X_Y_WIDTH_HEIGHT  (XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT)
+#define ROOT_EVENT_MASK     (XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY | XCB_EVENT_MASK_STRUCTURE_NOTIFY | XCB_EVENT_MASK_BUTTON_PRESS)
 
 // == Functions ==
 // TODO move static inline functions that are only used in picom.c, into

@@ -9,6 +9,8 @@
  *
  */
 
+#include <math.h>
+
 #include <X11/Xlib-xcb.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -25,6 +27,7 @@
 #include <xcb/sync.h>
 #include <xcb/xfixes.h>
 #include <xcb/xinerama.h>
+#include <xcb/shape.h>
 
 #include <ev.h>
 #include <test.h>
@@ -416,8 +419,18 @@ static void handle_root_flags(session_t *ps) {
 	}
 }
 
-static struct managed_win *paint_preprocess(session_t *ps, bool *fade_running) {
-	// XXX need better, more general name for `fade_running`. It really
+static struct managed_win *paint_preprocess(session_t *ps, bool *fade_running, bool *transition_running) {
+    // check if a window needs to perform a transition step, and perform it if so
+    win_stack_foreach_managed_safe(w, &ps->window_stack) {
+        if (w->is_transitioning) {
+            win_perform_transition_step(ps, w);
+            if (w->is_transitioning) {
+                *transition_running = true;
+            }
+        }
+    }
+
+    // XXX need better, more general name for `fade_running`. It really
 	// means if fade is still ongoing after the current frame is rendered
 	struct managed_win *bottom = NULL;
 	*fade_running = false;
@@ -1472,8 +1485,9 @@ static void _draw_callback(EV_P_ session_t *ps, int revents attr_unused) {
 	// is not redirected. its sole purpose should be to decide whether the screen
 	// should be redirected.
 	bool fade_running = false;
+	bool transition_running = false;
 	bool was_redirected = ps->redirected;
-	auto bottom = paint_preprocess(ps, &fade_running);
+	auto bottom = paint_preprocess(ps, &fade_running, &transition_running);
 	ps->tmout_unredir_hit = false;
 
 	if (!was_redirected && ps->redirected) {
@@ -1488,10 +1502,11 @@ static void _draw_callback(EV_P_ session_t *ps, int revents attr_unused) {
 		return _draw_callback(EV_A_ ps, revents);
 	}
 
+	// TODO: learn what the hell this even timer is for exactly, apparently it makes this function run more frequently or something
 	// Start/stop fade timer depends on whether window are fading
-	if (!fade_running && ev_is_active(&ps->fade_timer)) {
+	if (!fade_running && !transition_running && ev_is_active(&ps->fade_timer)) {
 		ev_timer_stop(EV_A_ & ps->fade_timer);
-	} else if (fade_running && !ev_is_active(&ps->fade_timer)) {
+	} else if (transition_running || fade_running && !ev_is_active(&ps->fade_timer)) {
 		ev_timer_set(&ps->fade_timer, fade_timeout(ps), 0);
 		ev_timer_start(EV_A_ & ps->fade_timer);
 	}

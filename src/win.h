@@ -89,6 +89,11 @@ struct win {
 	/// Always false if `is_new` is true.
 	bool managed : 1;
 };
+
+struct geometry {
+    int x, y, width, height;
+};
+
 struct managed_win {
 	struct win base;
 	/// backend data attached to this window. Only available when
@@ -110,6 +115,13 @@ struct managed_win {
 	/// Reply of xcb_get_geometry, which returns the geometry of the window body,
 	/// excluding the window border.
 	xcb_get_geometry_reply_t g;
+
+
+	bool is_transitioning;
+	int transition_start_time;
+	struct geometry transition_start_geometry;
+	struct geometry transition_end_geometry;
+
 	/// Xinerama screen this window is on.
 	int xinerama_scr;
 	/// Window visual pict format
@@ -308,6 +320,10 @@ void win_update_wintype(session_t *ps, struct managed_win *w);
 void win_mark_client(session_t *ps, struct managed_win *w, xcb_window_t client);
 void win_unmark_client(session_t *ps, struct managed_win *w);
 bool win_get_class(session_t *ps, struct managed_win *w);
+
+bool attr_pure win_should_transition(session_t *ps, const struct managed_win *w, xcb_configure_notify_event_t *ce);
+void win_start_transition(session_t *ps, struct managed_win *w, xcb_configure_notify_event_t *ce);
+void win_perform_transition_step(session_t *ps, struct managed_win *w);
 
 /**
  * Calculate and return the opacity target of a window.
