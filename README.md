@@ -1,3 +1,5 @@
+# You can use this fork but please don't fork it and make a PR with it
+
 picom
 =======
 
